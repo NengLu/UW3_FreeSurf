@@ -36,12 +36,14 @@ The Arbitrary Lagrangian–Eulerian formulation is adapted here to simulate the 
 ### Models:
 
 1. Topography relaxation model (Turcotte & Schubert, 2002)
-   <img src="images/swarm_norepo.png" alt="image" width="500" height="auto">
-   <img src="images/swarm_repo.png" alt="image" width="500" height="auto">
-   <img src="images/swarm_final.png" alt="image" width="500" height="auto">
-   <img src="images/Topography of the box mid.png" alt="image" width="500" height="auto">
 
-3. RTI model (Kaus et.al., 2010)
+   <img src="images/swarm_norepo.png" alt="image" width="400" height="auto">
+   <img src="images/swarm_repo.png" alt="image" width="400" height="auto">
+   <img src="images/swarm_final.png" alt="image" width="400" height="auto">
+   <img src="images/Topography of the box mid.png" alt="image" width="400" height="auto">
+
+2. RTI model (Kaus et.al., 2010)
+
    <img src="images/swarm_01.png" alt="image" width="500" height="auto">
 
 
