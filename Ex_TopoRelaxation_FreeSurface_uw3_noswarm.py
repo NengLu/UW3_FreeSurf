@@ -12,16 +12,19 @@
 #     name: python3
 # ---
 
-# Rayleigh-Taylor instability
-# This notebook models the Rayleigh-Taylor instability outlined in Kaus et al. (2010), for further free surface and FSSA implementation tests.
+# Loading and unloading of a viscous half-space
 #
-# ### References
-# Kaus, B. J., Mühlhaus, H., & May, D. A. (2010). A stabilization algorithm for geodynamic numerical simulations with a free surface. Physics of the Earth and Planetary Interiors, 181(1-2), 12-20.
+# see the similar case in uw2: [ViscoElasticHalfSpace](https://github.com/underworldcode/underworld2/blob/master/docs/UWGeodynamics/examples/1_08_ViscoElasticHalfSpace.ipynb)
+#
+# ======
+#
+# Loading of Earth's surface can be described with an initial periodic surface displacement of a viscous fluid within an infinite half space, the solution of which is outlined in Turcotte and Schubert (1982), 6.10 Postglacial Rebound.  The surface decreases exponentially with time and is dependent on the magnitude, $w_m$, and wavelength $\lambda$ of the perturbation, and the viscosity, $\eta$ and density, $\rho$ of the fluid,
+#
+# $$ w = w_m exp\Big(\frac{-\lambda \rho g t}{4\pi\eta}\Big) $$
+#
+# where $w$ is displacement, $w_m$ the initial load magnitude, $g$ gravity, $t$ time. This solution can be charaterised by the relaxation time, $t_{relax} = 4\pi\eta / \rho g \lambda $, the time taken for the initial load to decrease by $e^{-1}$. The solution for an elastic material with the equivalent load produces the same magnitude of displacement instantaneously.
+#
 
-# ### Ex in uw3
-#
-# https://github.com/underworldcode/underworld3/blob/development/Jupyterbook/Notebooks/Examples-StokesFlow/Ex_Stokes_Sinker.py
-# https://github.com/underworld-community/UW3-benchmarks
 #
 
 # +
@@ -29,7 +32,7 @@ import petsc4py
 from petsc4py import PETSc
 
 import underworld3 as uw
-from underworld3.systems import Stokes
+#from underworld3.systems import Stokes
 from underworld3 import function
 
 import numpy as np
@@ -38,75 +41,26 @@ import os
 from datetime import datetime
 import sys
 import matplotlib.pyplot as plt
-from underworld3.cython.petsc_discretisation import petsc_dm_find_labeled_points_local
 
 comm = uw.mpi.comm
 rank = uw.mpi.rank
 size = uw.mpi.size
-#if size == 1:
-#    import matplotlib.pyplot as plt
+
+from underworld3.cython.petsc_discretisation import petsc_dm_find_labeled_points_local
 
 # +
 u = uw.scaling.units
 ndim = uw.scaling.non_dimensionalise
 dim = uw.scaling.dimensionalise
 
-# # scaling 1: drho
-# dRho =   100. * u.kilogram / u.meter**3 # matprop.ref_density
-# g    =   9.81 * u.meter / u.second**2   # modprop.gravity
-# H    = 500. * u.kilometer #  modprop.boxHeight
-# bodyforce    = dRho*g
-
-# ref_stress = dRho * g * H
-# ref_viscosity = 1e21 * u.pascal * u.seconds
-
-# ref_time        = ref_viscosity/ref_stress
-# ref_length      = H
-# ref_mass        = (ref_viscosity*ref_length*ref_time).to_base_units()
-
-# KL = ref_length       
-# KM = ref_mass         
-# Kt = ref_time
-
-# scaling_coefficients = uw.scaling.get_coefficients()
-# scaling_coefficients["[length]"] = KL
-# scaling_coefficients["[time]"] = Kt
-# scaling_coefficients["[mass]"] = KM
-
-
-# # scaling 2: litho rho
-# ref_density = 3300. * u.kilogram / u.meter**3 # matprop.ref_density
-# dRho =   3300. * u.kilogram / u.meter**3 # matprop.ref_density
-# g    =   9.81 * u.meter / u.second**2   # modprop.gravity
-# H    = 100. * u.kilometer #  modprop.boxHeight
-# bodyforce    = dRho*g
-
-# ref_stress = dRho * g * H
-# ref_viscosity = 1e21 * u.pascal * u.seconds
-
-# ref_time   = ref_viscosity/ref_stress
-# ref_length = H
-# ref_mass   = (ref_viscosity*ref_length*ref_time).to_base_units()
-
-# KL = ref_length       
-# KM = ref_mass         
-# Kt = ref_time
-
-# scaling_coefficients = uw.scaling.get_coefficients()
-# scaling_coefficients["[length]"] = KL
-# scaling_coefficients["[time]"] = Kt
-# scaling_coefficients["[mass]"] = KM
-
 # scaling 3: vel
-H = 100.  * u.kilometer
-velocity     = 1e-9 * u.meter / u.second
-g    =   10.0 * u.meter / u.second**2  
-bodyforce    = 3300  * u.kilogram / u.metre**3 * g 
-mu           = 1e21  * u.pascal * u.second
+half_rate = 1.0 * u.centimeter / u.year
+model_length = 100. * u.kilometer
+bodyforce = 3300 * u.kilogram / u.metre**3 * 9.81 * u.meter / u.second**2
 
-KL = H
-Kt = KL / velocity
-KM = mu * KL * Kt
+KL = model_length
+Kt = KL / half_rate
+KM = bodyforce * KL**2 * Kt**2
 
 scaling_coefficients                    = uw.scaling.get_coefficients()
 scaling_coefficients["[length]"] = KL
@@ -114,39 +68,43 @@ scaling_coefficients["[time]"] = Kt
 scaling_coefficients["[mass]"]= KM
 
 # +
-#case_bc = "freeslip"  
-#case_bc = "noslip"
-case_bc = "freesurf"
+yres = 8
+xres = yres*4
+npoints = 50
 
-render = True
-max_time  = ndim(6.0*u.megayear)
-dt_set    = ndim(2.5e3*u.year)
+xmin, xmax = ndim(-200 * u.kilometer), ndim(200 * u.kilometer)
+ymin, ymax = ndim(-100 * u.kilometer), ndim(0 * u.kilometer)
+
+eta = ndim(1e21  * u.pascal * u.second)
+density = ndim(3300 * u.kilogram / u.metre**3)
+gravity = ndim(9.81 * u.meter / u.second**2)
+w_m    =   ndim(5.0 * u.kilometer)
+Lambda = ndim(100.0 * u.kilometer) 
+
+densityM = density
+viscM = eta
+ND_gravity = gravity
+
+def perturbation(x):
+    return w_m * np.cos(2.*np.pi*(x)/Lambda)
+
+# analytic solution
+xMax = xmax - xmin
+x = np.linspace(0, xMax, 200+1)
+w_0 = perturbation(x)
+t_relax = 4 * np.pi * eta / (Lambda * density * gravity)
+tMax = t_relax * 5 
+t = np.linspace(0, tMax, 100 * 10 + 1)
+w_t = w_m * np.exp(-1.*t/t_relax)
+
+max_time =  tMax
+#max_time =  t_relax*1e-2*2
+dt_set = t_relax*1e-2
 save_every = 5
 
-yres = 50 
-xmin, xmax = ndim(-250 * u.kilometer), ndim(250 * u.kilometer)
-ymin, ymax = ndim(-500 * u.kilometer), ndim(0 * u.kilometer)
-boxl = xmax-xmin
-boxh = ymax-ymin
-xres = int(boxl/boxh*yres)
-
-amplitude = ndim(5*u.kilometer)
-offset = ndim(-100.*u.kilometer)   # L
-L = ndim(100.*u.kilometer) 
-wavelength = ndim(500.*u.kilometer)
-k = 2.0 * np.pi / wavelength
-npoints = xres*2+1
-
-densityI = ndim(3200 * u.kilogram / u.metre**3)   # for an
-densityD = ndim(3300 * u.kilogram / u.metre**3)   # for litho
-ND_gravity = ndim(9.81 * u.meter / u.second**2)
-
-viscI = ndim(1e20 * u.pascal * u.second)
-viscD = ndim(1e21 * u.pascal * u.second)
-
-outputPath = "op_op_uw3_Ex_Kaus2010RTI_FreeSurface" + "_yres{:n}_wl{:n}_boxl{:n}/".format(yres,wavelength,boxl)
+outputPath = "op_Ex_TopoRelaxation_FreeSurface_uw3_swamrepo_mpi_yres_test"+str(yres)+"/"
 if uw.mpi.rank == 0:
-    # delete previous model run
+    #delete previous model run
     if os.path.exists(outputPath):
         for i in os.listdir(outputPath):
             os.remove(outputPath+ i)
@@ -155,10 +113,12 @@ if uw.mpi.rank == 0:
     if not os.path.exists(outputPath):
         os.makedirs(outputPath)
 
-print(ndim(max_time),ndim(dt_set),ndim(bodyforce))
-print(outputPath)
+# +
+# #!pip install scipy
 
 # +
+# petsc_dm_find_labeled_points_local
+
 import underworld3 as uw
 from scipy.interpolate import interp1d
 import numpy as np
@@ -205,16 +165,6 @@ def getVertexSet(mesh,label_name):
         ind_box_vertices = np.array([1,3]).astype(int)
     ind_points = np.append(ind_points,ind_box_vertices)
     return ind_points
-
-
-# +
-mesh = uw.meshing.StructuredQuadBox(elementRes=(int(xres), int(yres)), minCoords=(xmin, ymin), maxCoords=(xmax, ymax))
-init_mesh = uw.meshing.StructuredQuadBox(elementRes=(int(xres), int(yres)), minCoords=(xmin, ymin), maxCoords=(xmax, ymax))
-#meshbox = uw.meshing.UnstructuredSimplexBox(minCoords=(xmin, ymin), maxCoords=(xmax, ymax),cellSize=1.0/res,regular=False,qdegree=2,)
-#mesh.view()
-
-botwall = petsc_dm_find_labeled_points_local(mesh.dm,"Bottom")
-topwall = petsc_dm_find_labeled_points_local(mesh.dm,"Top")
 
 
 # +
@@ -281,6 +231,145 @@ def plot_meshswarm(title,mesh,swarm,material,showSwarm=False,showFig=True):
     pvmesh.clear_point_data()
 
 
+# +
+mesh = uw.meshing.StructuredQuadBox(elementRes=(int(xres), int(yres)), minCoords=(xmin, ymin), maxCoords=(xmax, ymax))      
+init_mesh = uw.meshing.StructuredQuadBox(elementRes=(int(xres), int(yres)), minCoords=(xmin, ymin), maxCoords=(xmax, ymax))
+
+# # dq2dq1
+# v = uw.discretisation.MeshVariable("V", mesh, mesh.dim, degree=2)
+# p = uw.discretisation.MeshVariable("P", mesh, 1, degree=1)
+
+# q1dq0
+v = uw.discretisation.MeshVariable("V", mesh, mesh.dim, degree=1,continuous=True)
+p = uw.discretisation.MeshVariable("P", mesh, 1, degree=0,continuous=False)
+timeField     = uw.discretisation.MeshVariable("time", mesh, 1, degree=1)
+
+# botwall = getVertexSet(mesh,'Bottom')
+# topwall = getVertexSet(mesh,'Top')
+
+botwall = petsc_dm_find_labeled_points_local(mesh.dm,"Bottom")
+topwall = petsc_dm_find_labeled_points_local(mesh.dm,"Top")
+def find_ind(value):
+    topwall_x = mesh.data[topwall,0]
+    idx = np.abs(topwall_x-value).argmin()
+    return idx
+idx = find_ind(0)
+topwallmid_Ind = topwall[idx] 
+
+# +
+# if uw.mpi.rank == 0:
+#     plot_mesh("mesh0",mesh)
+
+# +
+# Tmesh = uw.discretisation.MeshVariable("Tmesh", init_mesh, 1, degree=1)
+# Bmesh = uw.discretisation.MeshVariable("Bmesh", init_mesh, 1, degree=1)
+
+# mesh_solver = uw.systems.Poisson(init_mesh, u_Field=Tmesh, solver_name="FreeSurf_solver")
+# mesh_solver.constitutive_model = uw.constitutive_models.DiffusionModel
+# mesh_solver.constitutive_model.Parameters.diffusivity = 1. 
+# mesh_solver.f = 0.0
+# mesh_solver.add_dirichlet_bc(Bmesh.sym[0], "Top",0)
+# mesh_solver.add_dirichlet_bc(Bmesh.sym[0], "Bottom",0)
+
+# x = init_mesh.data[topwall,0]
+# with init_mesh.access(Bmesh):
+#     Bmesh.data[topwall, 0] = perturbation(x)
+#     Bmesh.data[botwall, 0] = init_mesh.data[botwall,-1]
+# mesh_solver.solve()
+
+# def update_mesh():
+#     with init_mesh.access():
+#         new_mesh_coords = init_mesh.data
+#         new_mesh_coords[:,-1] = Tmesh.data[:,0]
+#     return new_mesh_coords
+# new_mesh_coords = update_mesh()
+# mesh.deform_mesh(new_mesh_coords)
+# #update_mesh(mesh)
+#plot_mesh("mesh01",mesh)
+
+# +
+swarm  = uw.swarm.Swarm(mesh)
+material  = uw.swarm.IndexSwarmVariable("M", swarm, indices=1, proxy_degree=1)  
+fill_parameter= 2 # swarm fill parameter
+swarm.populate_petsc(fill_param=fill_parameter,layout=uw.swarm.SwarmPICLayout.GAUSS)
+# pop_control = uw.swarm.PopulationControl(swarm)
+
+MIndex = 0
+with swarm.access(material):
+    material.data[:] = MIndex
+
+density_fn = material.createMask([densityM])
+visc_fn = material.createMask([viscM])
+
+def build_stokes_solver(mesh,v,p):
+    stokes = uw.systems.Stokes(mesh, velocityField=v, pressureField=p)
+    stokes.constitutive_model = uw.constitutive_models.ViscousFlowModel
+    stokes.bodyforce = sympy.Matrix([0, -1 * ND_gravity * density_fn])
+    stokes.constitutive_model.Parameters.shear_viscosity_0 = visc_fn
+    stokes.add_dirichlet_bc((0.0,0.0), "Left", (0,))
+    stokes.add_dirichlet_bc((0.0,0.0), "Right", (0,))
+    stokes.add_dirichlet_bc((0.0,0.0), "Bottom", (0,1))
+    
+    # if uw.mpi.size == 1:
+    #     stokes.petsc_options['pc_type'] = 'lu'
+    
+    stokes.tolerance = 1.0e-6
+    stokes.petsc_options["ksp_rtol"] = 1.0e-6
+    stokes.petsc_options["ksp_atol"] = 1.0e-6
+    stokes.petsc_options["snes_converged_reason"] = None
+    stokes.petsc_options["snes_monitor_short"] = None
+    return stokes
+#stokes = build_stokes_solver(mesh,v,p)
+
+# stokes = uw.systems.Stokes(mesh, velocityField=v, pressureField=p)
+# stokes.constitutive_model = uw.constitutive_models.ViscousFlowModel
+# stokes.bodyforce = sympy.Matrix([0, -1 * ND_gravity * density_fn])
+# stokes.constitutive_model.Parameters.shear_viscosity_0 = visc_fn
+# stokes.add_dirichlet_bc((0.0,0.0), "Left", (0,))
+# stokes.add_dirichlet_bc((0.0,0.0), "Right", (0,))
+# stokes.add_dirichlet_bc((0.0,0.0), "Bottom", (0,1))
+
+# if uw.mpi.size == 1:
+#     stokes.petsc_options['pc_type'] = 'lu'
+
+# stokes.tolerance = 1.0e-6
+# stokes.petsc_options["ksp_rtol"] = 1.0e-6
+# stokes.petsc_options["ksp_atol"] = 1.0e-6
+# stokes.petsc_options["snes_converged_reason"] = None
+# stokes.petsc_options["snes_monitor_short"] = None
+
+
+# +
+# plot_mesh('swarm0',mesh,showSwarm=True)
+
+# +
+Tmesh = uw.discretisation.MeshVariable("Tmesh", init_mesh, 1, degree=1)
+Bmesh = uw.discretisation.MeshVariable("Bmesh", init_mesh, 1, degree=1)
+
+mesh_solver = uw.systems.Poisson(init_mesh, u_Field=Tmesh, solver_name="FreeSurf_solver")
+mesh_solver.constitutive_model = uw.constitutive_models.DiffusionModel
+mesh_solver.constitutive_model.Parameters.diffusivity = 1. 
+mesh_solver.f = 0.0
+mesh_solver.add_dirichlet_bc(Bmesh.sym[0], "Top",0)
+mesh_solver.add_dirichlet_bc(Bmesh.sym[0], "Bottom",0)
+
+x = init_mesh.data[topwall,0]
+with init_mesh.access(Bmesh):
+    Bmesh.data[topwall, 0] = perturbation(x)
+    Bmesh.data[botwall, 0] = init_mesh.data[botwall,-1]
+mesh_solver.solve()
+
+def update_mesh():
+    with init_mesh.access():
+        new_mesh_coords = init_mesh.data
+        new_mesh_coords[:,-1] = Tmesh.data[:,0]
+    return new_mesh_coords
+new_mesh_coords = update_mesh()
+mesh.deform_mesh(new_mesh_coords)
+#update_mesh(mesh)
+#if uw.mpi.rank == 0:
+#    plot_mesh("mesh01",mesh)
+#stokes = build_stokes_solver(mesh,v,p)
 # -
 
 from underworld3.utilities._api_tools import uw_object
@@ -457,93 +546,72 @@ class PopulationControl_DeformMesh(uw_object):
         return
 
 # +
-# # dq2dq1
-# v = uw.discretisation.MeshVariable("V", mesh, mesh.dim, degree=2)
-# p = uw.discretisation.MeshVariable("P", mesh, 1, degree=1)
-
-# q1dq0
-v = uw.discretisation.MeshVariable("V", mesh, mesh.dim, degree=1,continuous=True)
-p = uw.discretisation.MeshVariable("P", mesh, 1, degree=0,continuous=False)
-
-material_mesh = uw.discretisation.MeshVariable("M_mesh", mesh, 1, degree=1, continuous=True)
-timeField     = uw.discretisation.MeshVariable("time", mesh, 1, degree=1)
-
-swarm  = uw.swarm.Swarm(mesh)
-material  = uw.swarm.IndexSwarmVariable("M", swarm, indices=2, proxy_degree=1)  
-fill_parameter= 3 # swarm fill parameter
-swarm.populate_petsc(fill_param=fill_parameter,layout=uw.swarm.SwarmPICLayout.GAUSS)
-#pop_control = uw.swarm.PopulationControl(swarm)
-#pop_control_dm = PopulationControl_DeformMesh(swarm,swarm)
-
-interfaceSwarm = uw.swarm.Swarm(mesh)
-x = np.linspace(mesh.data[:,0].min(), mesh.data[:,0].max(), npoints)
-y = offset + amplitude * np.cos(k * x)
-interface_coords = np.ascontiguousarray(np.array([x,y]).T)
-interfaceSwarm.add_particles_with_coordinates(interface_coords)
-
-lightIndex = 0
-denseIndex = 1
-with swarm.access(material):
-    perturbation = offset + amplitude * np.cos(k * swarm.particle_coordinates.data[:, 0])
-    material.data[:, 0] = np.where(swarm.particle_coordinates.data[:, 1] < perturbation, lightIndex, denseIndex)
-
-density_fn = material.createMask([densityI, densityD])
-visc_fn = material.createMask([viscI,viscD])
-
-def build_stokes_solver(mesh,v,p):
-    stokes = uw.systems.Stokes(mesh, velocityField=v, pressureField=p)
-    stokes.constitutive_model = uw.constitutive_models.ViscousFlowModel
-    stokes.bodyforce = sympy.Matrix([0, -1 * ND_gravity * density_fn])
-    stokes.constitutive_model.Parameters.shear_viscosity_0 = visc_fn
-    stokes.saddle_preconditioner = 1.0 / stokes.constitutive_model.Parameters.shear_viscosity_0
-    stokes.add_dirichlet_bc((0.0,0.0), "Left", (0,))
-    stokes.add_dirichlet_bc((0.0,0.0), "Right", (0,))
-    stokes.add_dirichlet_bc((0.0,0.0), "Bottom", (0,1))
-
-    # if case_bc == "noslip":
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Left", (0,))
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Right", (0,))
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Top", (0,1))
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Bottom", (0,1))
-    
-    # if case_bc == "freeslip":
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Left", (0,))
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Right", (0,))
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Top", (1,))
-    #     stokes.add_dirichlet_bc((0.0,0.0), "Bottom", (0,1))
-        
-    if uw.mpi.size == 1:
-        stokes.petsc_options['pc_type'] = 'lu'
-    
-    stokes.tolerance = 1.0e-6
-    stokes.petsc_options["ksp_rtol"] = 1.0e-6
-    stokes.petsc_options["ksp_atol"] = 1.0e-6
-    stokes.petsc_options["snes_converged_reason"] = None
-    stokes.petsc_options["snes_monitor_short"] = None
-    return stokes
-
-
-# +
-# import matplotlib.pyplot as plt
-# fig, ax1 = plt.subplots(nrows=1, figsize=(10,6))
-# ax1.plot(interface_coords[:,0],interface_coords[:,1])
-
-# with interfaceSwarm.access():
-#     xcoord,ycoord = interfaceSwarm.data[:,0],interfaceSwarm.data[:,1]
-
-# fname = outputPath + "surfaceSwarm_test"
-# import matplotlib.pyplot as plt
-# fig, ax1 = plt.subplots(nrows=1, figsize=(10,6))
-# ax1.plot(xcoord,ycoord)
-# plt.savefig(fname,dpi=150,bbox_inches='tight')
-# plt.close()
+# if uw.mpi.rank == 0:
+#     plot_meshswarm("swarm_norepo",mesh,swarm,material,showSwarm=True,showFig=True)
 # -
 
 pop_control = PopulationControl_DeformMesh(swarm)
 
+# +
+# with pop_control._swarm.access():
+#     current_swarm_coords = pop_control._swarm.data
+#     current_swarm_cells = pop_control._swarm.particle_cellid.data[:,0]
+# current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
+# current_particle_cellID, current_ppc
 
 # +
-#plot_meshswarm("swarm_01",mesh,swarm,material,showSwarm=True,showFig=True)
+# pop_control.repopulate(mesh,material)
+# with pop_control._swarm.access():
+#     current_swarm_coords = pop_control._swarm.data
+#     current_swarm_cells = pop_control._swarm.particle_cellid.data[:,0]
+# current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
+# current_particle_cellID, current_ppc
+# -
+
+pop_control.repopulate(mesh,material)
+# if uw.mpi.rank == 0:
+#     plot_meshswarm("swarm_repo",mesh,swarm,material,showSwarm=True,showFig=True)
+
+# +
+## some test
+
+# with swarm.access():
+#     current_swarm_coords = swarm.data
+#     current_swarm_cells = swarm.particle_cellid.data[:,0]
+
+# current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
+
+# ### find over-populated cells
+# overpopulated_cells = current_particle_cellID[current_ppc > pop_control._swarm_ppc]
+
+
+# current_particle_cellID, current_ppc 
+# -
+
+# ### repopulate 
+# ### similar to Ben's PopControl.redistribute
+#
+# - **_update the the swarm's owning cell_**
+# - add particles to the underpopulated_cells from the new swarm build on the deformed mesh
+# - **_delete particles to the overpopulated cells which are closed to each other_** (random in redistribute)
+
+
+
+
+
+# +
+# cellid = swarm.dm.getField("DMSwarm_cellid")
+# coords = swarm.dm.getField("DMSwarmPIC_coor").reshape((-1, swarm.dim))
+# cellid[:] = swarm.mesh.get_closest_cells(coords).reshape(-1)
+# swarm.dm.restoreField("DMSwarmPIC_coor")
+# swarm.dm.restoreField("DMSwarm_cellid")
+# # now migrate.
+# swarm.dm.migrate(remove_sent_points=True)
+# # void these things too
+# swarm._index = None
+# swarm._nnmapdict = {}
+
+# plot_meshswarm("swarm_newnore",mesh,swarm,material,showSwarm=True,showFig=True)
 # -
 
 def _adjust_time_units(val):
@@ -577,6 +645,7 @@ def _adjust_time_units(val):
 # +
 from scipy.interpolate import interp1d
 from scipy.interpolate import CloughTocher2DInterpolator
+from scipy.interpolate import pchip_interpolate
 
 class FreeSurfaceProcessor(object): 
     def __init__(self,v,dt):
@@ -623,11 +692,14 @@ class FreeSurfaceProcessor(object):
                 y2 = y + vy * self._dt
         
                 # Spline top surface
+                #fx = pchip_interpolate(x2,y2,x)
                 f = interp1d(x2, y2, kind='cubic', fill_value='extrapolate')
     
                 with self.init_mesh.access(self.Bmesh):
                     self.Bmesh.data[self.bottom, 0] = mesh.data[self.bottom, -1]
                     self.Bmesh.data[self.top, 0] = f(x)      
+             # TO DO : with mpi
+             # need reordering y according x then interp?
             else:
                 coords = mesh.data[self.top]
                 x = coords[:,0]
@@ -667,7 +739,7 @@ class FreeSurfaceProcessor(object):
 
 # +
 step      = 0
-max_steps = 2
+max_steps = 5
 time      = 0
 dt        = 0
 
@@ -680,7 +752,7 @@ w = []
 dwdt = []
 times = []
 
-while time < max_time:
+while time < max_time:   
 #while step < max_steps:
     
     if uw.mpi.rank == 0:
@@ -690,230 +762,62 @@ while time < max_time:
         datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         sys.stdout.write(string)
         sys.stdout.flush()
-    
+
     stokes = build_stokes_solver(mesh,v,p)
     stokes.solve(zero_init_guess=False)
 
+    #particle_coordinates = mesh.data[topwallmid_Ind]
+    #w = particle_coordinates[1]
+    #dwdt = uw.function.evaluate(v.fn,mesh.data[topwallmid_Ind:topwallmid_Ind+1,:])[0,1]
+    #print(dwdt)
+  
+    #fw = open(outputPath + "ParticlePosition.txt","a")
+    #fw.write("%.4e \t %.4e \t %.4e \n" %(time,w,dwdt))
+    #fw.close()
+    #amplitudes.append(get_amplitudes()[0])
+    times.append(time)
 
     if step%save_every ==0:
         if uw.mpi.rank == 0:
             print(f'\nSave data:')
         with mesh.access(timeField):
             timeField.data[:,0] = dim(time, u.megayear).m
-
-        # with surfaceSwarm.access():
-        #     xcoord,ycoord = surfaceSwarm.data[:,0],surfaceSwarm.data[:,1]
-        # fname = outputPath + "surfaceSwarm_step"+str(step)
-        # #import matplotlib.pyplot as plt
-        # fig, ax1 = plt.subplots(nrows=1, figsize=(10,6))
-        # ax1.plot(xcoord,ycoord)
-        # plt.savefig(fname,dpi=150,bbox_inches='tight')
-        # plt.close()
-
-        mesh.petsc_save_checkpoint(index=step, outputPath=outputPath+"mesh.")
+        
         mesh.petsc_save_checkpoint(meshVars=[v, p, timeField], index=step, outputPath=outputPath)
-        swarm.petsc_save_checkpoint(swarmName='swarm', index=step, outputPath=outputPath) 
-        interfaceSwarm.petsc_save_checkpoint(swarmName='interfaceSwarm', index=step, outputPath=outputPath) 
+        #swarm.petsc_save_checkpoint(swarmName='swarm', index=step, outputPath=outputPath) 
+        #interfaceSwarm.petsc_save_checkpoint(swarmName='interfaceSwarm', index=step, outputPath=outputPath) 
 
-        #filename = "mat_step"+str(step)+"_time_"+str(np.round(dim(time,u.megayear).m,3))+"Ma"
-        #plot_meshswarm(filename,mesh,swarm,material,showSwarm=True,showFig=False)
+        filename = "mat_step"+str(step)+"_time_"+str(np.round(dim(time,u.megayear).m,3))+"Ma"
+        #plot_mesh(filename,mesh,showSwarm=True,showFig=False)
         #plot_mat(filename,figshow=False)
-
-    times.append(time)
+    
     dt_solver = stokes.estimate_dt()
     dt = min(dt_solver,dt_set)
-    
-    swarm.advection(V_fn=stokes.u.sym, delta_t=dt)
-    interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt)
 
+    #swarm.advection(V_fn=stokes.u.sym, delta_t=dt,order=2)
+    #interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,order=2)
+    
+    # coords = mesh.data[topwall]
+    # vx = uw.function.evalf(v.sym[0], coords)
+    # vy = uw.function.evalf(v.sym[1], coords)
     freesuface = FreeSurfaceProcessor(v,dt)
     new_mesh_coords=freesuface.solve()
     mesh.deform_mesh(new_mesh_coords)
-    if uw.mpi.rank == 0:
-        print(f'\nrepopulate start:')
-    pop_control.repopulate(mesh,material)
-    if uw.mpi.rank == 0:
-        print(f'\nrepopulate end:')
     #repopulate(swarm,mesh,updateField=material)
-    #pop_control.redistribute(material)
+    #pop_control.repopulate(mesh,material)
     #pop_control.repopulate(material)
 
+    # #in uw2
+    # advector.integrate(dt, update_owners=False)
+    # freesuface =  FreeSurfaceProcessor_MV()
+    # freesuface.solve(dt)
+    # swarm.update_particle_owners()
+    # pop_control.repopulate()
+
+             
     step += 1
     time += dt
-
-# +
-#plot_meshswarm("swarm_test",mesh,swarm,material,showSwarm=True,showFig=True)
 # -
-
-
-
-
-
-
-
-# +
-# index = step
-# filename =  outputPath+ f"mesh.{index:05}.h5"
-# mesh.write(filename=filename, index=step)
-# -
-
-
-
-# +
-# data = swarm.mesh.data
-
-# x1 = data[topwall,0]
-# y1 = data[topwall,1]
-# zipxy = zip(x1,y1)
-# zipxy = sorted(zipxy)
-# x1,y1 = zip(*zipxy) 
-
-# title = "mesh topwall_uw3" 
-# fig, ax = plt.subplots(nrows=1, figsize=(5,3))
-# ax.set_title(title)
-# ax.plot(y1,'--r',label = 'new_mesh')
-# #ax.axhline(0.05,color='black',linestyle='-')
-# ax.legend(loc='best',prop = {'size':8})
-
-# +
-# # import matplotlib.pyplot as plt
-# # fig, ax1 = plt.subplots(nrows=1, figsize=(10,6))
-# # ax1.plot(interface_coords[:,0],interface_coords[:,1])
-
-# with interfaceSwarm.access():
-#     xcoord,ycoord = interfaceSwarm.data[:,0],interfaceSwarm.data[:,1]
-
-# title = "interface_uw3" 
-# import matplotlib.pyplot as plt
-# fig, ax1 = plt.subplots(nrows=1, figsize=(5,3))
-# ax1.set_title(title)
-# ax1.plot(xcoord,ycoord)
-# ax1.set_ylim([-1.06,-0.94])
-# # plt.savefig(fname,dpi=150,bbox_inches='tight')
-# # plt.close()
-
-# +
-#plot_meshswarm("swarm_test",mesh,swarm,material,showSwarm=True,showFig=True)
-
-# +
-# x1 = mesh.data[topwall,0]
-# y1 = mesh.data[topwall,1]
-# zipxy = zip(x1,y1)
-# zipxy = sorted(zipxy)
-# x1,y1 = zip(*zipxy) 
-
-# x0 = init_mesh.data[topwall,0]
-# y0 = init_mesh.data[topwall,1]
-# zipxy = zip(x0,y0)
-# zipxy = sorted(zipxy)
-# x0,y0 = zip(*zipxy) 
-
-
-# x2 = swarm.mesh.data[topwall,0]
-# y2 = swarm.mesh.data[topwall,1]
-# zipxy = zip(x2,y2)
-# zipxy = sorted(zipxy)
-# x2,y2 = zip(*zipxy) 
-
-# #fname = "Topography of the box mid"
-# title = "mesh topwall_uw3" 
-# fig, ax = plt.subplots(nrows=1, figsize=(5,3))
-# ax.set_title(title)
-# ax.plot(y1,'--r',label = 'new_mesh')
-# ax.plot(y0,'-k',label='old_mesh')
-# ax.plot(y2,'-.b',label='swarm_mesh')
-# #ax.axhline(0.05,color='black',linestyle='-')
-# ax.legend(loc='best',prop = {'size':8})
-
-# +
-# if rank == 0:
-#     import matplotlib.pyplot as plt
-#     data = np.loadtxt(outputPath + "ParticlePosition.txt",skiprows=1)
-#     arrTime = data[:,0]
-#     arrW = data[:,1]
-#     arrdWdt = data[:,2]
-
-#     #fig, ax1 = plt.subplots(nrows=1, figsize=(6.7,5))
-#     fname = "w dwdt versus time"
-#     plt.clf()
-#     plt.plot(arrTime,arrW,label='w tracer')
-#     #plt.plot(arrTime,amplitudes,label='w fourier')
-#     plt.plot(arrTime,arrdWdt,label='dw/dt')
-#     plt.xlabel('Time')
-#     plt.ylabel('Perturbation Displacement / Velocity')
-#     plt.legend(loc=2)
-#     plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
-
-#     fname = "dwdt versus w"
-#     plt.clf()
-#     plt.scatter(arrW,arrdWdt,label='dw/dt')
-#     plt.xlabel('w')
-#     plt.ylabel('dWdt')
-#     plt.legend(loc=2)
-#     plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
-
-
-#     arrTau = arrdWdt / arrW
-#     # k = 2 * pi * n / (domain width)
-#     k = 2. * np.pi * perturbation_n[0]/(xmax-xmin) * L
-#     print("Tau at each time: ")
-#     print(arrTau)
-#     avTau = np.average(arrTau)
-#     print("Average Tau is %.2e" %avTau)
-
-# +
-# def analytic_growthrate(k):
-#     q = (np.cosh(k) * np.sinh(k) - k)/(k**2. + np.cosh(k)**2.) / (2.*k)
-#     return q
-# import scipy
-# fitfn = lambda t,a,b,c: a+b*np.exp(c*t)
-# import scipy.optimize
-# # a decent first guess is important, as np.exp can explode easily.
-# guess = (0., perturbation_a[0], 2.*analytic_growthrate(k))  
-# #fit = scipy.optimize.curve_fit(fitfn,  times,  amplitudes, p0=guess)
-
-# +
-# import psutil
-# process = psutil.Process()
-# virtual_memory = psutil.virtual_memory()
-# print(f"Total Available Memory: {virtual_memory.total / (1024 ** 3):.2f} GB")
-# print(f"Used Memory: {virtual_memory.used / (1024 ** 3):.2f} GB")
-# print(f"Free Memory: {virtual_memory.available / (1024 ** 3):.2f} GB")
-# print(f"Percent Used: {virtual_memory.percent:.2f}%")
-
-# print(f"Jupyter Notebook Process ID: {process.pid}")
-# print(f"Jupyter Notebook Memory Usage: {process.memory_info().rss / (1024 ** 3):.2f} GB")
-
-# +
-# if rank == 0:
-#     plt.clf()
-    
-#     # The solution is undefined at 0, so start at 0.01
-#     arrK = np.linspace(0.01,10,100)
-#     arrATau = np.zeros(len(arrK))
-#     plt.xlim(0,10)
-#     plt.ylim(0,0.2)
-#     for i in range(len(arrK)):
-#         arrATau[i] = analytic_growthrate(arrK[i])
-
-#     fname = "Growth Rate versus k"
-#     plt.plot(arrK,arrATau,label="Analytic Solution")
-#     plt.scatter(k,avTau,label="Numerical Calculation (tracer)")
-#     #plt.scatter(k,fit[0][2],label="Numerical Calculation (Fourier)")
-#     plt.legend()
-#     plt.xlabel('Wavenumber (proportional to frequency) ' + r'$k = 2 \pi L / \lambda$')
-#     plt.ylabel('Growth Rate ' + r'$\tau$')
-#     plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
-
-#     fname = "Growth Rate versus time"
-#     plt.clf()
-#     plt.scatter(arrTime,arrTau,label="Numerical Calculation (tracer)")
-#     plt.xlabel('Time')
-#     plt.ylabel('Growth ate ' + r'$\tau$')
-#     plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
-# -
-
-
 
 
 

@@ -96,9 +96,9 @@ case_swarm = cases_swarm[run[1]]
 render = True
 max_time  = ndim(6.0*u.megayear)
 dt_set    = ndim(2.5e3*u.year)
-save_every = 20
+save_every = 5
 
-yres = 32  
+yres = 50  
 xmin, xmax = ndim(-250 * u.kilometer), ndim(250 * u.kilometer)
 ymin, ymax = ndim(-500 * u.kilometer), ndim(0 * u.kilometer)
 boxl = xmax-xmin
@@ -120,7 +120,7 @@ viscI = ndim(1e20 * u.pascal * u.second)
 viscD = ndim(1e21 * u.pascal * u.second)
 
 outputPath = "op_uw2_" +case_bc+"_"+ case_swarm +"_yres{:n}_wl{:n}_boxl{:n}/".format(yres,wavelength,boxl)
-if uw.mpi.size == 1:
+if uw.mpi.rank == 0:
     ## delete previous model run
     # if os.path.exists(outputPath):
     #     for i in os.listdir(outputPath):
@@ -150,7 +150,7 @@ velocityField.data[:] = [0.0, 0.0]
 pressureField.data[:] = 0.0
 timeField.data[...] = 0.0
 
-swarm = uw.swarm.Swarm(mesh=mesh)
+swarm = uw.swarm.Swarm(mesh=mesh,particleEscape=True)
 materialIndex = swarm.add_variable(dataType="int", count=1)
 # swarmLayout = uw.swarm.layouts.PerCellSpaceFillerLayout(swarm=swarm, particlesPerCell=swarmGPC)
 # swarm.populate_using_layout(layout=swarmLayout)
@@ -417,22 +417,21 @@ class FreeSurfaceProcessor_MV(object):
 
     def _advect_surface(self, dt):
 
-        #if self.top:
-            # Extract top surface
-        x = mesh.data[self.top.data, 0]
-        y = mesh.data[self.top.data, 1]
+        if self.top:
+           x = mesh.data[self.top.data, 0]
+           y = mesh.data[self.top.data, 1]
 
         # Extract velocities from top
-        vx = velocityField.data[self.top.data, 0]
-        vy = velocityField.data[self.top.data, 1]
+           vx = velocityField.data[self.top.data, 0]
+           vy = velocityField.data[self.top.data, 1]
 
         # Advect top surface
-        x2 = x + vx * dt
-        y2 = y + vy * dt
+           x2 = x + vx * dt
+           y2 = y + vy * dt
 
         # Spline top surface
-        f = interp1d(x2, y2, kind='cubic', fill_value='extrapolate')
-        self.TField.data[self.top.data, 0] = f(x)
+           f = interp1d(x2, y2, kind='cubic', fill_value='extrapolate')
+           self.TField.data[self.top.data, 0] = f(x)
         
         comm.Barrier()
         self.TField.syncronise()

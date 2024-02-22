@@ -341,25 +341,25 @@ class FreeSurfaceProcessor_MV(object):
 
     def _advect_surface(self, dt):
 
-        #if self.top:
-            # Extract top surface
-        x = mesh.data[self.top.data, 0]
-        y = mesh.data[self.top.data, 1]
+        if self.top:
+           x = mesh.data[self.top.data, 0]
+           y = mesh.data[self.top.data, 1]
 
         # Extract velocities from top
-        vx = velocityField.data[self.top.data, 0]
-        vy = velocityField.data[self.top.data, 1]
+           vx = velocityField.data[self.top.data, 0]
+           vy = velocityField.data[self.top.data, 1]
 
         # Advect top surface
-        x2 = x + vx * dt
-        y2 = y + vy * dt
+           x2 = x + vx * dt
+           y2 = y + vy * dt
 
         # Spline top surface
-        f = interp1d(x2, y2, kind='cubic', fill_value='extrapolate')
-        self.TField.data[self.top.data, 0] = f(x)
+           f = interp1d(x2, y2, kind='cubic', fill_value='extrapolate')
+           self.TField.data[self.top.data, 0] = f(x)
         
         comm.Barrier()
         self.TField.syncronise()
+        
         
     def _update_mesh(self):
         with  mesh.deform_mesh():

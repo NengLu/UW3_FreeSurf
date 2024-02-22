@@ -46,6 +46,8 @@ comm = uw.mpi.comm
 rank = uw.mpi.rank
 size = uw.mpi.size
 
+from underworld3.cython.petsc_discretisation import petsc_dm_find_labeled_points_local
+
 # +
 u = uw.scaling.units
 ndim = uw.scaling.non_dimensionalise
@@ -100,8 +102,8 @@ max_time =  tMax
 dt_set = t_relax*1e-2
 save_every = 5
 
-outputPath = "tem_test_op_TopoRelaxation_FreeSurf_uw3_yres"+str(yres)+"_testSwarm/"
-if uw.mpi.size == 1:
+outputPath = "op_Ex_TopoRelaxation_FreeSurface_uw3_swamrepo_mpi_yres_test"+str(yres)+"/"
+if uw.mpi.rank == 0:
     #delete previous model run
     if os.path.exists(outputPath):
         for i in os.listdir(outputPath):
@@ -115,6 +117,8 @@ if uw.mpi.size == 1:
 # #!pip install scipy
 
 # +
+# petsc_dm_find_labeled_points_local
+
 import underworld3 as uw
 from scipy.interpolate import interp1d
 import numpy as np
@@ -240,17 +244,48 @@ v = uw.discretisation.MeshVariable("V", mesh, mesh.dim, degree=1,continuous=True
 p = uw.discretisation.MeshVariable("P", mesh, 1, degree=0,continuous=False)
 timeField     = uw.discretisation.MeshVariable("time", mesh, 1, degree=1)
 
-botwall = getVertexSet(mesh,'Bottom')
-topwall = getVertexSet(mesh,'Top')
+# botwall = getVertexSet(mesh,'Bottom')
+# topwall = getVertexSet(mesh,'Top')
+
+botwall = petsc_dm_find_labeled_points_local(mesh.dm,"Bottom")
+topwall = petsc_dm_find_labeled_points_local(mesh.dm,"Top")
 def find_ind(value):
     topwall_x = mesh.data[topwall,0]
     idx = np.abs(topwall_x-value).argmin()
     return idx
 idx = find_ind(0)
 topwallmid_Ind = topwall[idx] 
-# -
 
-#plot_mesh("mesh0",mesh)
+# +
+# if uw.mpi.rank == 0:
+#     plot_mesh("mesh0",mesh)
+
+# +
+# Tmesh = uw.discretisation.MeshVariable("Tmesh", init_mesh, 1, degree=1)
+# Bmesh = uw.discretisation.MeshVariable("Bmesh", init_mesh, 1, degree=1)
+
+# mesh_solver = uw.systems.Poisson(init_mesh, u_Field=Tmesh, solver_name="FreeSurf_solver")
+# mesh_solver.constitutive_model = uw.constitutive_models.DiffusionModel
+# mesh_solver.constitutive_model.Parameters.diffusivity = 1. 
+# mesh_solver.f = 0.0
+# mesh_solver.add_dirichlet_bc(Bmesh.sym[0], "Top",0)
+# mesh_solver.add_dirichlet_bc(Bmesh.sym[0], "Bottom",0)
+
+# x = init_mesh.data[topwall,0]
+# with init_mesh.access(Bmesh):
+#     Bmesh.data[topwall, 0] = perturbation(x)
+#     Bmesh.data[botwall, 0] = init_mesh.data[botwall,-1]
+# mesh_solver.solve()
+
+# def update_mesh():
+#     with init_mesh.access():
+#         new_mesh_coords = init_mesh.data
+#         new_mesh_coords[:,-1] = Tmesh.data[:,0]
+#     return new_mesh_coords
+# new_mesh_coords = update_mesh()
+# mesh.deform_mesh(new_mesh_coords)
+# #update_mesh(mesh)
+#plot_mesh("mesh01",mesh)
 
 # +
 swarm  = uw.swarm.Swarm(mesh)
@@ -275,10 +310,8 @@ def build_stokes_solver(mesh,v,p):
     stokes.add_dirichlet_bc((0.0,0.0), "Right", (0,))
     stokes.add_dirichlet_bc((0.0,0.0), "Bottom", (0,1))
     
-    if uw.mpi.size == 1:
-        stokes.petsc_options['pc_type'] = 'lu'
-    else:
-    	stokes.petsc_options['pc_type'] = 'mumps'
+    # if uw.mpi.size == 1:
+    #     stokes.petsc_options['pc_type'] = 'lu'
     
     stokes.tolerance = 1.0e-6
     stokes.petsc_options["ksp_rtol"] = 1.0e-6
@@ -286,7 +319,27 @@ def build_stokes_solver(mesh,v,p):
     stokes.petsc_options["snes_converged_reason"] = None
     stokes.petsc_options["snes_monitor_short"] = None
     return stokes
+#stokes = build_stokes_solver(mesh,v,p)
 
+# stokes = uw.systems.Stokes(mesh, velocityField=v, pressureField=p)
+# stokes.constitutive_model = uw.constitutive_models.ViscousFlowModel
+# stokes.bodyforce = sympy.Matrix([0, -1 * ND_gravity * density_fn])
+# stokes.constitutive_model.Parameters.shear_viscosity_0 = visc_fn
+# stokes.add_dirichlet_bc((0.0,0.0), "Left", (0,))
+# stokes.add_dirichlet_bc((0.0,0.0), "Right", (0,))
+# stokes.add_dirichlet_bc((0.0,0.0), "Bottom", (0,1))
+
+# if uw.mpi.size == 1:
+#     stokes.petsc_options['pc_type'] = 'lu'
+
+# stokes.tolerance = 1.0e-6
+# stokes.petsc_options["ksp_rtol"] = 1.0e-6
+# stokes.petsc_options["ksp_atol"] = 1.0e-6
+# stokes.petsc_options["snes_converged_reason"] = None
+# stokes.petsc_options["snes_monitor_short"] = None
+
+
+# +
 # plot_mesh('swarm0',mesh,showSwarm=True)
 
 # +
@@ -313,33 +366,11 @@ def update_mesh():
     return new_mesh_coords
 new_mesh_coords = update_mesh()
 mesh.deform_mesh(new_mesh_coords)
-
-#plot_mesh("mesh01",mesh)
-
-# +
-# x1 = mesh.data[topwall,0]
-# y1 = mesh.data[topwall,1]
-# zipxy = zip(x1,y1)
-# zipxy = sorted(zipxy)
-# x1,y1 = zip(*zipxy) 
-
-# x0 = init_mesh.data[topwall,0]
-# y0 = init_mesh.data[topwall,1]
-# zipxy = zip(x0,y0)
-# zipxy = sorted(zipxy)
-# x0,y0 = zip(*zipxy) 
-
-# #fname = "Topography of the box mid"
-# fig, ax = plt.subplots(nrows=1, figsize=(5,3))
-# ax.plot(y1,'--r',label = 'new_mesh')
-# ax.plot(y0,'-k',label='old_mesh')
-# #ax.axhline(0.05,color='black',linestyle='-')
-# ax.legend(loc='best',prop = {'size':8})
+#update_mesh(mesh)
+#if uw.mpi.rank == 0:
+#    plot_mesh("mesh01",mesh)
+#stokes = build_stokes_solver(mesh,v,p)
 # -
-
-#plot_mesh("mesh0_reinit",init_mesh)
-
-
 
 from underworld3.utilities._api_tools import uw_object
 from scipy.spatial import distance
@@ -514,25 +545,73 @@ class PopulationControl_DeformMesh(uw_object):
 
         return
 
-#plot_meshswarm("swarm_norepo",mesh,swarm,material,showSwarm=True,showFig=True)
+# +
+# if uw.mpi.rank == 0:
+#     plot_meshswarm("swarm_norepo",mesh,swarm,material,showSwarm=True,showFig=True)
+# -
 
 pop_control = PopulationControl_DeformMesh(swarm)
 
-with pop_control._swarm.access():
-    current_swarm_coords = pop_control._swarm.data
-    current_swarm_cells = pop_control._swarm.particle_cellid.data[:,0]
-current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
-current_particle_cellID, current_ppc
+# +
+# with pop_control._swarm.access():
+#     current_swarm_coords = pop_control._swarm.data
+#     current_swarm_cells = pop_control._swarm.particle_cellid.data[:,0]
+# current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
+# current_particle_cellID, current_ppc
+
+# +
+# pop_control.repopulate(mesh,material)
+# with pop_control._swarm.access():
+#     current_swarm_coords = pop_control._swarm.data
+#     current_swarm_cells = pop_control._swarm.particle_cellid.data[:,0]
+# current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
+# current_particle_cellID, current_ppc
+# -
 
 pop_control.repopulate(mesh,material)
-with pop_control._swarm.access():
-    current_swarm_coords = pop_control._swarm.data
-    current_swarm_cells = pop_control._swarm.particle_cellid.data[:,0]
-current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
-current_particle_cellID, current_ppc
+# if uw.mpi.rank == 0:
+#     plot_meshswarm("swarm_repo",mesh,swarm,material,showSwarm=True,showFig=True)
 
-pop_control.repopulate(mesh,material)
-#plot_meshswarm("swarm_repo",mesh,swarm,material,showSwarm=True,showFig=True)
+# +
+## some test
+
+# with swarm.access():
+#     current_swarm_coords = swarm.data
+#     current_swarm_cells = swarm.particle_cellid.data[:,0]
+
+# current_particle_cellID, current_ppc  = np.unique(current_swarm_cells, return_counts=True)
+
+# ### find over-populated cells
+# overpopulated_cells = current_particle_cellID[current_ppc > pop_control._swarm_ppc]
+
+
+# current_particle_cellID, current_ppc 
+# -
+
+# ### repopulate 
+# ### similar to Ben's PopControl.redistribute
+#
+# - **_update the the swarm's owning cell_**
+# - add particles to the underpopulated_cells from the new swarm build on the deformed mesh
+# - **_delete particles to the overpopulated cells which are closed to each other_** (random in redistribute)
+
+
+
+
+
+# +
+# cellid = swarm.dm.getField("DMSwarm_cellid")
+# coords = swarm.dm.getField("DMSwarmPIC_coor").reshape((-1, swarm.dim))
+# cellid[:] = swarm.mesh.get_closest_cells(coords).reshape(-1)
+# swarm.dm.restoreField("DMSwarmPIC_coor")
+# swarm.dm.restoreField("DMSwarm_cellid")
+# # now migrate.
+# swarm.dm.migrate(remove_sent_points=True)
+# # void these things too
+# swarm._index = None
+# swarm._nnmapdict = {}
+
+# plot_meshswarm("swarm_newnore",mesh,swarm,material,showSwarm=True,showFig=True)
 # -
 
 def _adjust_time_units(val):
@@ -566,6 +645,7 @@ def _adjust_time_units(val):
 # +
 from scipy.interpolate import interp1d
 from scipy.interpolate import CloughTocher2DInterpolator
+from scipy.interpolate import pchip_interpolate
 
 class FreeSurfaceProcessor(object): 
     def __init__(self,v,dt):
@@ -612,11 +692,12 @@ class FreeSurfaceProcessor(object):
                 y2 = y + vy * self._dt
         
                 # Spline top surface
+                #fx = pchip_interpolate(x2,y2,x)
                 f = interp1d(x2, y2, kind='cubic', fill_value='extrapolate')
     
                 with self.init_mesh.access(self.Bmesh):
                     self.Bmesh.data[self.bottom, 0] = mesh.data[self.bottom, -1]
-                    self.Bmesh.data[self.top, 0] = f(x)        
+                    self.Bmesh.data[self.top, 0] = f(x)      
              # TO DO : with mpi
              # need reordering y according x then interp?
             else:
@@ -639,9 +720,8 @@ class FreeSurfaceProcessor(object):
                 with self.init_mesh.access(self.Bmesh):
                     self.Bmesh.data[self.bottom, 0] = mesh.data[self.bottom, -1]
                     self.Bmesh.data[self.top, 0] = f((x,y)) 
-                
-         # uw.mpi.barrier()
-         # self.Bmesh.syncronise()
+        uw.mpi.barrier()
+        #self.Bmesh.syncronise()
          
     def _update_mesh(self):
         with self.init_mesh.access():
@@ -659,7 +739,7 @@ class FreeSurfaceProcessor(object):
 
 # +
 step      = 0
-max_steps = 10
+max_steps = 5
 time      = 0
 dt        = 0
 
@@ -672,9 +752,8 @@ w = []
 dwdt = []
 times = []
 
-#while time < max_time:
-    
-while step < max_steps:
+while time < max_time:   
+#while step < max_steps:
     
     if uw.mpi.rank == 0:
         string = """Step: {0:5d} Model Time: {1:6.1f} dt: {2:6.1f} ({3})\n""".format(
@@ -718,9 +797,13 @@ while step < max_steps:
     swarm.advection(V_fn=stokes.u.sym, delta_t=dt,order=2)
     #interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,order=2)
     
+    # coords = mesh.data[topwall]
+    # vx = uw.function.evalf(v.sym[0], coords)
+    # vy = uw.function.evalf(v.sym[1], coords)
     freesuface = FreeSurfaceProcessor(v,dt)
     new_mesh_coords=freesuface.solve()
     mesh.deform_mesh(new_mesh_coords)
+    #repopulate(swarm,mesh,updateField=material)
     pop_control.repopulate(mesh,material)
     #pop_control.repopulate(material)
 
@@ -739,7 +822,7 @@ while step < max_steps:
 
 
 #pop_control.repopulate(mesh,material)
-#plot_meshswarm("swarm_final",mesh,swarm,material,showSwarm=True,showFig=True)
+plot_meshswarm("swarm_final",mesh,swarm,material,showSwarm=True,showFig=True)
 
 
 
