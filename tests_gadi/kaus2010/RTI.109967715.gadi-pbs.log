@@ -1,0 +1,16 @@
+Step:     0 Model Time: 0.0 year dt: 0.0 year (2024-03-04 00:57:45)
+  0 SNES Function norm 155.967 
+Nonlinear  solve did not converge due to DIVERGED_MAX_IT iterations 0
+  0 SNES Function norm 155.967 
+  1 SNES Function norm 0.000219339 
+  2 SNES Function norm 5.700e-11 
+Nonlinear  solve converged due to CONVERGED_FNORM_ABS iterations 2
+
+Save data:
+[1709474282.411467] [gadi-cpu-clx-2591:1627454:0]     tl_ucp_coll.c:45   TL_UCP ERROR failure in send completion Message truncated
+[1709474282.411491] [gadi-cpu-clx-2591:1627455:0]     tl_ucp_coll.c:45   TL_UCP ERROR failure in send completion Message truncated
+[1709474282.411474] [gadi-cpu-clx-2591:1627453:0]     tl_ucp_coll.c:45   TL_UCP ERROR failure in send completion Message truncated
+[1709474282.411497] [gadi-cpu-clx-2591:1627453:0]     tl_ucp_coll.c:45   TL_UCP ERROR failure in send completion Message truncated
+[1709474282.411506] [gadi-cpu-clx-2591:1627453:0]    ucc_schedule.h:156  UCC  ERROR failure in task 0x1ffb300, Unhandled error
+[1709474282.411618] [gadi-cpu-clx-2591:1627455:0]     tl_ucp_coll.c:45   TL_UCP ERROR failure in send completion Message truncated
+[1709474282.411626] [gadi-cpu-clx-2591:1627455:0]    ucc_schedule.h:156  UCC  ERROR failure in task 0x3ef2300, Unhandled error

@@ -1,0 +1,14 @@
+Found Environment
+
+======================================================================================
+                  Resource Usage on 2024-03-04 00:58:05:
+   Job Id:             109967715.gadi-pbs
+   Project:            m18
+   Exit Status:        139 (Linux Signal 11 SIGSEGV Segmentation violation)
+   Service Units:      0.33
+   NCPUs Requested:    4                      NCPUs Used: 4               
+                                           CPU Time Used: 00:01:18        
+   Memory Requested:   100.0GB               Memory Used: 4.45GB          
+   Walltime requested: 02:00:00            Walltime Used: 00:00:24        
+   JobFS requested:    20.0MB                 JobFS used: 8.05MB          
+======================================================================================

@@ -1,0 +1,18 @@
+#PBS -P m18
+#PBS -q normal
+#PBS -l walltime=2:00:00
+#PBS -l mem=100GB
+#PBS -l jobfs=20MB
+#PBS -l ncpus=4
+#PBS -l software=underworld
+#PBS -l wd
+#PBS -N rti_test
+
+source /scratch/m18/nl3963/gadi_install.sh
+
+MODELNAME="RTI"
+OUTPUTPATH=`pwd`
+SCRIPT="Ex_Kaus2010RTI_FreeSurface_uw3.py"
+
+# execution
+mpiexec python3 ./$SCRIPT 1> $OUTPUTPATH/$MODELNAME.$PBS_JOBID.log 2> $OUTPUTPATH/$MODELNAME.$PBS_JOBID.err

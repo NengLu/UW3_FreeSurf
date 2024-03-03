@@ -1,0 +1,22 @@
+#PBS -P m18
+#PBS -q normal
+#PBS -l walltime=1:00:00
+#PBS -l mem=100GB
+#PBS -l jobfs=10MB
+#PBS -l ncpus=8
+#PBS -l software=underworld
+#PBS -l wd
+#PBS -l storage=gdata/m18
+#PBS -N res32
+
+
+source /scratch/m18/nl3963/gadi_install.sh
+
+MODELNAME="res32"
+OUTPUTPATH="./"
+SCRIPT="Ex_TopoRelaxation_FreeSurface_uw3_noswarm_res32.py"
+
+export OPENBLAS_NUM_THREADS=1
+# execution
+mpiexec python3 ./$SCRIPT 1> $OUTPUTPATH/$MODELNAME.$PBS_JOBID.log 2> $OUTPUTPATH/$MODELNAME.$PBS_JOBID.err
+

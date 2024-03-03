@@ -1,0 +1,9 @@
+Step:     0 Model Time: 0.0 year dt: 0.0 year (2024-03-04 00:53:17)
+  0 SNES Function norm 0.0617417 
+Nonlinear  solve did not converge due to DIVERGED_MAX_IT iterations 0
+  0 SNES Function norm 0.0617417 
+  1 SNES Function norm 1.01773e-06 
+  2 SNES Function norm < 1.e-11
+Nonlinear  solve converged due to CONVERGED_FNORM_ABS iterations 2
+
+Save data:
