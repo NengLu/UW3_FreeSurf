@@ -633,6 +633,7 @@ w = []
 dwdt = []
 times = []
 
+stokes = build_stokes_solver(mesh,v,p)
 while time < max_time:
 #while step < max_steps:
     
@@ -644,8 +645,9 @@ while time < max_time:
         sys.stdout.write(string)
         sys.stdout.flush()
     
-    stokes = build_stokes_solver(mesh,v,p)
-    stokes.solve(zero_init_guess=False)
+    #stokes = build_stokes_solver(mesh,v,p)
+    #stokes.solve(zero_init_guess=False)
+    stokes.solve(zero_init_guess=False,_force_setup=True)
 
 
     if step%save_every ==0:
