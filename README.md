@@ -64,6 +64,16 @@ where $w$ is displacement, $w_m$ the initial load magnitude, $g$ gravity, $t$ ti
 
 Rayleigh–Taylor instability ofadense,moreviscous layer ($\rho = 3300 kg/m^3$, $\eta = 10^{21} Pa s$), sinkingthrougha less densefluid ($\rho = 3200 kg/m^3$, $\eta = 10^{20} Pa s$). Side boundaries are free slip, the lower boundary is no-slip and the upper boundary is a free surface. The box is 500 × 500 km in size, and gravitational acceleration was 9.81 $m/s^2$. The initial perturbation was sinusoidal with an initial amplitude of 5 km. A constant time step of 2500 years was employed, with Q1P0 elements and 51×51 nodes.
 
+### 3. Case 1 (Crameri et al., 2012)
+
+The topography relaxation model is the same as case 1 from (Crameri et al., 2012) which is used here to validate the free surface implementation. The model setups are shown in Fig 1. It has a 600 km thick mantle, overlain by a 100 km thick lithosphere with a prescribed 7km amplitude cosine topography. The model box are 2800 km * 700 km, is caluated by the resolution of 280 × 140 gridpoints with 9 particles per element.
+
+The maximum topography of this model at time t can be derived analytically (Ramberg, 1967) using the relaxation rate γ and from the initial maximum topography:
+
+$$h_{analytic} = h_{init} exp(\gamma t)$$
+
+where t = 14.825 ka is the characteristic relaxation time and $\gamma$ = −0.2139×10−11 s−1 is the characteristic relaxation rate.
+
 ### Reference
 - Thieulot, C. (2011). FANTOM: Two-and three-dimensional numerical modelling of creeping flows for the solution of geological problems. Physics of the Earth and Planetary Interiors, 188(1-2), 47-68.
 - Kaus, B. J., Mühlhaus, H., & May, D. A. (2010). A stabilization algorithm for geodynamic numerical simulations with a free surface. Physics of the Earth and Planetary Interiors, 181(1-2), 12-20.
