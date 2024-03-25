@@ -349,39 +349,20 @@ else:
     material_mesh.sym[0] = material_fn
 
 
-# In[12]:
+# In[13]:
 
 
-# ### define advection phi
-# phiM = uw.discretisation.MeshVariable("phiM", mesh, 1, degree=1,continuous=True)
-# gradient = sympy.vector.gradient(phi.fn)
-# gradient_magnitude = sympy.sqrt(gradient.dot(gradient))
-# gradientM = uw.systems.Projection(mesh, phiM)
-# gradientM.uw_function = gradient_magnitude
-# gradientM.smoothing = 1.0e-3
-# gradientM.solve()
+plot_mesh_var("phi_step_init",mesh,phi.fn,showVar=True,showFig=True)
 
-phidx = uw.discretisation.MeshVariable("phidx", mesh, 1, degree=1,continuous=True)
-gradientx = uw.systems.Projection(mesh, phidx)
-gradientx.uw_function = sympy.diff(phi.sym, mesh.N.x)
-gradientx.smoothing = 1.0e-3
 
-phidy = uw.discretisation.MeshVariable("phidy", mesh, 1, degree=1,continuous=True)
-gradienty = uw.systems.Projection(mesh, phidy)
-gradienty.uw_function = sympy.diff(phi.sym, mesh.N.y)
-gradienty.smoothing = 1.0e-3
-gradientx.solve()
-gradienty.solve()
+# In[19]:
 
-def advection_phi(V_fn_matrix,dt):
-    gradientx.solve()
-    gradienty.solve()
-    with mesh.access(phi):
-        v_at_Vpts = np.zeros_like(mesh.data)
-        for d in range(mesh.dim): 
-            v_at_Vpts[:, d] = uw.function.evalf(V_fn_matrix[d], mesh.data).reshape(-1)
-        phi.data[:,0] = phi.data[:,0] -(v_at_Vpts[:, 0]*phidx.data[:, 0]+v_at_Vpts[:, 1]*phidy.data[:, 0])*dt
-    return 
+
+plot_mesh_var("material_step_init",mesh,material_mesh.sym[0],showVar=True,showFig=True)
+
+
+# In[ ]:
+
 
 ## update phi
 adv_phi = uw.systems.AdvDiffusion(mesh, u_Field=phi, V_fn=v, solver_name="adv_phi")
@@ -390,30 +371,6 @@ adv_phi.constitutive_model.Parameters.diffusivity= 0.
 adv_phi.theta = 0.5
 # adv_diff.add_dirichlet_bc(0.0, "Lower")
 # adv_diff.add_dirichlet_bc(0.0, "Upper")
-
-
-# In[13]:
-
-
-plot_mesh_var("phi_step_init",mesh,phi.fn,showVar=True,showFig=True)
-
-
-# In[14]:
-
-
-plot_mesh_var("phidx_step_init",mesh,phidx.fn,showVar=True,showFig=True)
-
-
-# In[15]:
-
-
-plot_mesh_var("phidy_step_init",mesh,phidy.fn,showVar=True,showFig=True)
-
-
-# In[19]:
-
-
-plot_mesh_var("material_step_init",mesh,material_mesh.sym[0],showVar=True,showFig=True)
 
 
 # In[21]:
@@ -439,80 +396,104 @@ stokes.petsc_options["snes_converged_reason"] = None
 stokes.petsc_options["snes_monitor_short"] = None
 
 
+# In[ ]:
+
+
+### solver test
+stokes.solve(zero_init_guess=False)
+dt_solver = stokes.estimate_dt()
+dt = min(dt_solver,dt_set)
+
+#interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,evalf=True)
+adv_phi.solve(timestep=dt,zero_init_guess=True)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
 # In[22]:
 
 
-def _adjust_time_units(val):
-    """ Adjust the units used depending on the value """
-    if isinstance(val, u.Quantity):
-        mag = val.to(u.years).magnitude
-    else:
-        val = dim(val, u.years)
-        mag = val.magnitude
-    exponent = int("{0:.3E}".format(mag).split("E")[-1])
+# def _adjust_time_units(val):
+#     """ Adjust the units used depending on the value """
+#     if isinstance(val, u.Quantity):
+#         mag = val.to(u.years).magnitude
+#     else:
+#         val = dim(val, u.years)
+#         mag = val.magnitude
+#     exponent = int("{0:.3E}".format(mag).split("E")[-1])
 
-    if exponent >= 9:
-        units = u.gigayear
-    elif exponent >= 6:
-        units = u.megayear
-    elif exponent >= 3:
-        units = u.kiloyears
-    elif exponent >= 0:
-        units = u.years
-    elif exponent > -3:
-        units = u.days
-    elif exponent > -5:
-        units = u.hours
-    elif exponent > -7:
-        units = u.minutes
-    else:
-        units = u.seconds
-    return val.to(units)
+#     if exponent >= 9:
+#         units = u.gigayear
+#     elif exponent >= 6:
+#         units = u.megayear
+#     elif exponent >= 3:
+#         units = u.kiloyears
+#     elif exponent >= 0:
+#         units = u.years
+#     elif exponent > -3:
+#         units = u.days
+#     elif exponent > -5:
+#         units = u.hours
+#     elif exponent > -7:
+#         units = u.minutes
+#     else:
+#         units = u.seconds
+#     return val.to(units)
 
 
 # In[23]:
 
 
-step      = 0
-max_steps = 2
-time      = 0
-dt        = 0
+# step      = 0
+# max_steps = 2
+# time      = 0
+# dt        = 0
 
-w = []
-dwdt = []
-times = []
+# w = []
+# dwdt = []
+# times = []
 
-while time < max_time:
-#while step < max_steps: 
-    if uw.mpi.rank == 0:
-        string = """Step: {0:5d} Model Time: {1:6.1f} dt: {2:6.1f} ({3})\n""".format(
-        step, _adjust_time_units(time),
-        _adjust_time_units(dt),
-        datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        sys.stdout.write(string)
-        sys.stdout.flush()
+# while time < max_time:
+# #while step < max_steps: 
+#     if uw.mpi.rank == 0:
+#         string = """Step: {0:5d} Model Time: {1:6.1f} dt: {2:6.1f} ({3})\n""".format(
+#         step, _adjust_time_units(time),
+#         _adjust_time_units(dt),
+#         datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+#         sys.stdout.write(string)
+#         sys.stdout.flush()
         
-    stokes.solve(zero_init_guess=False)
+#     stokes.solve(zero_init_guess=False)
     
-    if step%save_every ==0:
-        if uw.mpi.rank == 0:
-            print(f'\nSave data:')
-        with mesh.access(timeField):
-            timeField.data[:,0] = dim(time, u.megayear).m
-        mesh.petsc_save_checkpoint(meshVars=[v, p, timeField,material_mesh,phi], index=step, outputPath=outputPath)
-        interfaceSwarm.petsc_save_checkpoint(swarmName='interfaceSwarm', index=step, outputPath=outputPath) 
+#     if step%save_every ==0:
+#         if uw.mpi.rank == 0:
+#             print(f'\nSave data:')
+#         with mesh.access(timeField):
+#             timeField.data[:,0] = dim(time, u.megayear).m
+#         mesh.petsc_save_checkpoint(meshVars=[v, p, timeField,material_mesh,phi], index=step, outputPath=outputPath)
+#         interfaceSwarm.petsc_save_checkpoint(swarmName='interfaceSwarm', index=step, outputPath=outputPath) 
 
-    times.append(time)
-    dt_solver = stokes.estimate_dt()
-    dt = min(dt_solver,dt_set)
+#     times.append(time)
+#     dt_solver = stokes.estimate_dt()
+#     dt = min(dt_solver,dt_set)
     
-    interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,evalf=True)
+#     interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,evalf=True)
     
-    #adv_phi.solve(timestep=dt,zero_init_guess=True)
-    advection_phi(stokes.u.sym,dt)
+#     #adv_phi.solve(timestep=dt,zero_init_guess=True)
+#     advection_phi(stokes.u.sym,dt)
 
-    step += 1
-    time += dt
+#     step += 1
+#     time += dt
 
 
 # In[ ]:
@@ -537,12 +518,6 @@ plot_mesh_var("material_step_final",mesh,material_mesh.sym[0],showVar=True,showF
 
 
 plot_mesh_var("density_step_final",mesh,density_fn,showVar=True,showFig=True)
-
-
-# In[26]:
-
-
-plot_mesh_var("phidy_step_final",mesh,phidy.fn,showVar=True,showFig=True)
 
 
 # In[29]:
@@ -571,16 +546,4 @@ ax1.scatter(interface_coords[:,0]*KL.m,interface_coords[:,1]*KL.m,c = "k")
 # ax1.grid()
 #ax1.legend(loc = 'lower left',prop = {'size':8})
 plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
 

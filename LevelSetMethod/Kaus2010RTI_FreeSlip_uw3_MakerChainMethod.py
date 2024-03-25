@@ -79,9 +79,9 @@ from underworld3.cython.petsc_discretisation import petsc_dm_find_labeled_points
 use_diff = False
 
 if use_diff:
-    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_levelset_diff_test/'
+    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_markerchain_diff/'
 else:
-    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_levelset_test/'
+    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_markerchain/'
     
 if uw.mpi.size == 1:
     # delete previous model run
@@ -206,41 +206,6 @@ def plot_mesh_var(title,mesh,var,showVar=False,showFig=True):
     pl.screenshot(outputPath+title+".png",window_size=pv.global_theme.window_size,return_img=False) 
     pvmesh.clear_data()
     pvmesh.clear_point_data()
-    
-def plot_mesh_var2(title,mesh,var,showVar=False,showFig=True):
-    import numpy as np
-    import pyvista as pv
-    import vtk
-    
-    pv.global_theme.background = "white"
-    pv.global_theme.window_size = [500, 500]
-    pv.global_theme.jupyter_backend = "static"
-    pv.global_theme.smooth_shading = True
-    pv.global_theme.show_edges = True
-    pv.global_theme.axes.show = True
-
-    mesh.vtk("tmp_box_mesh.vtk")
-    pvmesh = pv.read("tmp_box_mesh.vtk")
-    pl = pv.Plotter()
-    pl.add_mesh(pvmesh,'Black', 'wireframe')
-
-    if showVar:
-        with mesh.access():
-            points = np.zeros((mesh.data.shape[0],3))
-            points[:,0] = mesh.data[:,0]
-            points[:,1] = mesh.data[:,1]
-            point_cloud = pv.PolyData(points)
-            point_cloud.point_data["M"] = var
-        #pl.add_points(point_cloud, color="red",render_points_as_spheres=False, point_size=3, opacity=0.5)
-        pl.add_mesh(point_cloud, cmap="coolwarm", edge_color="Black", show_edges=False, scalars='M',
-                        use_transparency=False, opacity=0.95, point_size= 3)
-    pl.add_title(title,font_size=11)
-    if showFig:
-        pl.show(cpos="xy")
-    
-    pl.screenshot(outputPath+title+".png",window_size=pv.global_theme.window_size,return_img=False) 
-    pvmesh.clear_data()
-    pvmesh.clear_point_data()
 
 
 # In[6]:
@@ -267,7 +232,7 @@ phi = uw.discretisation.MeshVariable("phi", mesh, 1, degree=1,continuous=True)
 timeField = uw.discretisation.MeshVariable("time", mesh, 1, degree=1)
 
 
-# In[10]:
+# In[8]:
 
 
 from scipy.spatial import distance
@@ -318,10 +283,10 @@ def init_phi():
     return 
 
 
-# In[11]:
+# In[9]:
 
 
-indices = init_phi()
+init_phi()
 
 densityI = ndim(3200 * u.kilogram / u.metre**3)
 densityD = ndim(3300 * u.kilogram / u.metre**3)
@@ -334,7 +299,6 @@ def material_parameter_fn(c1,c2,alphah):
     return sympy.Piecewise((c1,phi.sym[0] <= -alphah),
                            (c2,phi.sym[0] > alphah),
                            ((c2-c1)*phi.sym[0]/alphah/2.+(c1+c2)/2, True))
-
 if use_diff:
     visc_fn = material_parameter_fn(viscI,viscD,alphah)
     density_fn = material_parameter_fn(densityI,densityD,alphah) 
@@ -349,74 +313,19 @@ else:
     material_mesh.sym[0] = material_fn
 
 
-# In[12]:
-
-
-# ### define advection phi
-# phiM = uw.discretisation.MeshVariable("phiM", mesh, 1, degree=1,continuous=True)
-# gradient = sympy.vector.gradient(phi.fn)
-# gradient_magnitude = sympy.sqrt(gradient.dot(gradient))
-# gradientM = uw.systems.Projection(mesh, phiM)
-# gradientM.uw_function = gradient_magnitude
-# gradientM.smoothing = 1.0e-3
-# gradientM.solve()
-
-phidx = uw.discretisation.MeshVariable("phidx", mesh, 1, degree=1,continuous=True)
-gradientx = uw.systems.Projection(mesh, phidx)
-gradientx.uw_function = sympy.diff(phi.sym, mesh.N.x)
-gradientx.smoothing = 1.0e-3
-
-phidy = uw.discretisation.MeshVariable("phidy", mesh, 1, degree=1,continuous=True)
-gradienty = uw.systems.Projection(mesh, phidy)
-gradienty.uw_function = sympy.diff(phi.sym, mesh.N.y)
-gradienty.smoothing = 1.0e-3
-gradientx.solve()
-gradienty.solve()
-
-def advection_phi(V_fn_matrix,dt):
-    gradientx.solve()
-    gradienty.solve()
-    with mesh.access(phi):
-        v_at_Vpts = np.zeros_like(mesh.data)
-        for d in range(mesh.dim): 
-            v_at_Vpts[:, d] = uw.function.evalf(V_fn_matrix[d], mesh.data).reshape(-1)
-        phi.data[:,0] = phi.data[:,0] -(v_at_Vpts[:, 0]*phidx.data[:, 0]+v_at_Vpts[:, 1]*phidy.data[:, 0])*dt
-    return 
-
-## update phi
-adv_phi = uw.systems.AdvDiffusion(mesh, u_Field=phi, V_fn=v, solver_name="adv_phi")
-adv_phi.constitutive_model = uw.constitutive_models.DiffusionModel
-adv_phi.constitutive_model.Parameters.diffusivity= 0.
-adv_phi.theta = 0.5
-# adv_diff.add_dirichlet_bc(0.0, "Lower")
-# adv_diff.add_dirichlet_bc(0.0, "Upper")
-
-
-# In[13]:
+# In[10]:
 
 
 plot_mesh_var("phi_step_init",mesh,phi.fn,showVar=True,showFig=True)
 
 
-# In[14]:
-
-
-plot_mesh_var("phidx_step_init",mesh,phidx.fn,showVar=True,showFig=True)
-
-
-# In[15]:
-
-
-plot_mesh_var("phidy_step_init",mesh,phidy.fn,showVar=True,showFig=True)
-
-
-# In[19]:
+# In[11]:
 
 
 plot_mesh_var("material_step_init",mesh,material_mesh.sym[0],showVar=True,showFig=True)
 
 
-# In[21]:
+# In[13]:
 
 
 stokes = uw.systems.Stokes(mesh, velocityField=v, pressureField=p)
@@ -439,7 +348,7 @@ stokes.petsc_options["snes_converged_reason"] = None
 stokes.petsc_options["snes_monitor_short"] = None
 
 
-# In[22]:
+# In[14]:
 
 
 def _adjust_time_units(val):
@@ -470,7 +379,7 @@ def _adjust_time_units(val):
     return val.to(units)
 
 
-# In[23]:
+# In[15]:
 
 
 step      = 0
@@ -483,7 +392,7 @@ dwdt = []
 times = []
 
 while time < max_time:
-#while step < max_steps: 
+    
     if uw.mpi.rank == 0:
         string = """Step: {0:5d} Model Time: {1:6.1f} dt: {2:6.1f} ({3})\n""".format(
         step, _adjust_time_units(time),
@@ -491,61 +400,47 @@ while time < max_time:
         datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         sys.stdout.write(string)
         sys.stdout.flush()
-        
     stokes.solve(zero_init_guess=False)
-    
+
     if step%save_every ==0:
         if uw.mpi.rank == 0:
             print(f'\nSave data:')
         with mesh.access(timeField):
             timeField.data[:,0] = dim(time, u.megayear).m
+
         mesh.petsc_save_checkpoint(meshVars=[v, p, timeField,material_mesh,phi], index=step, outputPath=outputPath)
         interfaceSwarm.petsc_save_checkpoint(swarmName='interfaceSwarm', index=step, outputPath=outputPath) 
-
+        
     times.append(time)
     dt_solver = stokes.estimate_dt()
     dt = min(dt_solver,dt_set)
     
     interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,evalf=True)
-    
-    #adv_phi.solve(timestep=dt,zero_init_guess=True)
-    advection_phi(stokes.u.sym,dt)
+    init_phi()
 
     step += 1
     time += dt
 
 
-# In[ ]:
-
-
-
-
-
-# In[24]:
+# In[16]:
 
 
 plot_mesh_var("phi_step_final",mesh,phi.sym,showVar=True,showFig=True)
 
 
-# In[30]:
-
-
-plot_mesh_var("material_step_final",mesh,material_mesh.sym[0],showVar=True,showFig=True)
-
-
-# In[25]:
+# In[17]:
 
 
 plot_mesh_var("density_step_final",mesh,density_fn,showVar=True,showFig=True)
 
 
-# In[26]:
+# In[18]:
 
 
-plot_mesh_var("phidy_step_final",mesh,phidy.fn,showVar=True,showFig=True)
+plot_mesh_var("material_step_final",mesh,material_mesh.sym[0],showVar=True,showFig=True)
 
 
-# In[29]:
+# In[19]:
 
 
 with mesh.access():
@@ -571,12 +466,6 @@ ax1.scatter(interface_coords[:,0]*KL.m,interface_coords[:,1]*KL.m,c = "k")
 # ax1.grid()
 #ax1.legend(loc = 'lower left',prop = {'size':8})
 plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
-
-
-# In[ ]:
-
-
-
 
 
 # In[ ]:
