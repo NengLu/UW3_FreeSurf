@@ -79,9 +79,9 @@ from underworld3.cython.petsc_discretisation import petsc_dm_find_labeled_points
 use_diff = False
 
 if use_diff:
-    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_levelset_diff_test/'
+    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_levelset_diff_adsolver/'
 else:
-    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_levelset_test/'
+    outputPath = 'op_Kaus2010RTI_FreeSlip_uw3_levelset_adsolver/'
     
 if uw.mpi.size == 1:
     # delete previous model run
@@ -267,7 +267,7 @@ phi = uw.discretisation.MeshVariable("phi", mesh, 1, degree=1,continuous=True)
 timeField = uw.discretisation.MeshVariable("time", mesh, 1, degree=1)
 
 
-# In[10]:
+# In[7]:
 
 
 from scipy.spatial import distance
@@ -318,7 +318,7 @@ def init_phi():
     return 
 
 
-# In[11]:
+# In[8]:
 
 
 indices = init_phi()
@@ -339,84 +339,42 @@ if use_diff:
     visc_fn = material_parameter_fn(viscI,viscD,alphah)
     density_fn = material_parameter_fn(densityI,densityD,alphah) 
     material_fn = sympy.Piecewise((lightIndex,phi.sym[0] < 0.0,),(denseIndex, True))
-    material_mesh.sym[0] = material_fn
+    #material_mesh.sym[0] = material_fn
     print("use_diff")
 
 else:
     visc_fn = sympy.Piecewise((viscD,phi.sym[0] > 0.0),(viscI, True))
     density_fn = sympy.Piecewise((densityD,phi.sym[0] > 0.0),(densityI, True))  
     material_fn = sympy.Piecewise((lightIndex,phi.sym[0] < 0.0,),(denseIndex, True))
-    material_mesh.sym[0] = material_fn
+    #material_mesh.sym[0] = material_fn
 
 
-# In[12]:
+# In[9]:
 
 
-# ### define advection phi
-# phiM = uw.discretisation.MeshVariable("phiM", mesh, 1, degree=1,continuous=True)
-# gradient = sympy.vector.gradient(phi.fn)
-# gradient_magnitude = sympy.sqrt(gradient.dot(gradient))
-# gradientM = uw.systems.Projection(mesh, phiM)
-# gradientM.uw_function = gradient_magnitude
-# gradientM.smoothing = 1.0e-3
-# gradientM.solve()
+plot_mesh_var("phi_step_init",mesh,phi.fn,showVar=True,showFig=True)
 
-phidx = uw.discretisation.MeshVariable("phidx", mesh, 1, degree=1,continuous=True)
-gradientx = uw.systems.Projection(mesh, phidx)
-gradientx.uw_function = sympy.diff(phi.sym, mesh.N.x)
-gradientx.smoothing = 1.0e-3
 
-phidy = uw.discretisation.MeshVariable("phidy", mesh, 1, degree=1,continuous=True)
-gradienty = uw.systems.Projection(mesh, phidy)
-gradienty.uw_function = sympy.diff(phi.sym, mesh.N.y)
-gradienty.smoothing = 1.0e-3
-gradientx.solve()
-gradienty.solve()
+# In[10]:
 
-def advection_phi(V_fn_matrix,dt):
-    gradientx.solve()
-    gradienty.solve()
-    with mesh.access(phi):
-        v_at_Vpts = np.zeros_like(mesh.data)
-        for d in range(mesh.dim): 
-            v_at_Vpts[:, d] = uw.function.evalf(V_fn_matrix[d], mesh.data).reshape(-1)
-        phi.data[:,0] = phi.data[:,0] -(v_at_Vpts[:, 0]*phidx.data[:, 0]+v_at_Vpts[:, 1]*phidy.data[:, 0])*dt
-    return 
+
+#plot_mesh_var("material_step_init",mesh,material_mesh.sym[0],showVar=True,showFig=True)
+
+
+# In[11]:
+
 
 ## update phi
 adv_phi = uw.systems.AdvDiffusion(mesh, u_Field=phi, V_fn=v, solver_name="adv_phi")
 adv_phi.constitutive_model = uw.constitutive_models.DiffusionModel
 adv_phi.constitutive_model.Parameters.diffusivity= 0.
 adv_phi.theta = 0.5
+adv_phi.tolerance=1.0e-6
 # adv_diff.add_dirichlet_bc(0.0, "Lower")
 # adv_diff.add_dirichlet_bc(0.0, "Upper")
 
 
-# In[13]:
-
-
-plot_mesh_var("phi_step_init",mesh,phi.fn,showVar=True,showFig=True)
-
-
-# In[14]:
-
-
-plot_mesh_var("phidx_step_init",mesh,phidx.fn,showVar=True,showFig=True)
-
-
-# In[15]:
-
-
-plot_mesh_var("phidy_step_init",mesh,phidy.fn,showVar=True,showFig=True)
-
-
-# In[19]:
-
-
-plot_mesh_var("material_step_init",mesh,material_mesh.sym[0],showVar=True,showFig=True)
-
-
-# In[21]:
+# In[12]:
 
 
 stokes = uw.systems.Stokes(mesh, velocityField=v, pressureField=p)
@@ -435,11 +393,35 @@ if uw.mpi.size == 1:
 stokes.tolerance = 1.0e-6
 stokes.petsc_options["ksp_rtol"] = 1.0e-6
 stokes.petsc_options["ksp_atol"] = 1.0e-6
-stokes.petsc_options["snes_converged_reason"] = None
-stokes.petsc_options["snes_monitor_short"] = None
+#stokes.petsc_options["snes_converged_reason"] = None
+#stokes.petsc_options["snes_monitor_short"] = None
 
 
-# In[22]:
+# In[13]:
+
+
+# ### solver test
+# stokes.solve(zero_init_guess=False)
+# dt_solver = stokes.estimate_dt()
+# dt = min(dt_solver,dt_set)
+
+# #interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,evalf=True)
+# adv_phi.solve(timestep=dt,zero_init_guess=True)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[14]:
 
 
 def _adjust_time_units(val):
@@ -470,7 +452,7 @@ def _adjust_time_units(val):
     return val.to(units)
 
 
-# In[23]:
+# In[15]:
 
 
 step      = 0
@@ -508,8 +490,8 @@ while time < max_time:
     
     interfaceSwarm.advection(V_fn=stokes.u.sym, delta_t=dt,evalf=True)
     
-    #adv_phi.solve(timestep=dt,zero_init_guess=True)
-    advection_phi(stokes.u.sym,dt)
+    adv_phi.solve(timestep=dt,zero_init_guess=True)
+    #advection_phi(stokes.u.sym,dt)
 
     step += 1
     time += dt
@@ -521,31 +503,25 @@ while time < max_time:
 
 
 
-# In[24]:
+# In[16]:
 
 
 plot_mesh_var("phi_step_final",mesh,phi.sym,showVar=True,showFig=True)
 
 
-# In[30]:
+# In[17]:
 
 
 plot_mesh_var("material_step_final",mesh,material_mesh.sym[0],showVar=True,showFig=True)
 
 
-# In[25]:
+# In[18]:
 
 
 plot_mesh_var("density_step_final",mesh,density_fn,showVar=True,showFig=True)
 
 
-# In[26]:
-
-
-plot_mesh_var("phidy_step_final",mesh,phidy.fn,showVar=True,showFig=True)
-
-
-# In[29]:
+# In[19]:
 
 
 with mesh.access():
@@ -573,10 +549,32 @@ ax1.scatter(interface_coords[:,0]*KL.m,interface_coords[:,1]*KL.m,c = "k")
 plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
 
 
-# In[ ]:
+# In[22]:
 
 
+with mesh.access():
+    dis = dy*3
+    dis_data = uw.function.evalf(phi.fn,mesh.data)
+    condition = np.abs(dis_data) <=dis
+    dis_plot = dis_data[condition]
+    nodes_plot = mesh.data[condition]
 
+# with interfaceSwarm.access():
+#     interface_coords = interfaceSwarm.data
+    
+    
+fname = "Mesh nodes closed to the interface"
+fig, ax1 = plt.subplots(nrows=1, figsize=(5,5))
+ax1.set(xlabel='x coordinates [km]', ylabel='Interface Depth [km]') 
+#ax1.set(xlabel='Time [Myrs]', ylabel='Interface Depth [km]') 
+ax1.set_title(fname)
+ax1.scatter(nodes_plot[:,0]*KL.m,nodes_plot[:,1]*KL.m,c=dis_plot)
+#ax1.scatter(interface_coords[:,0]*KL.m,interface_coords[:,1]*KL.m,c = "k")
+# ax1.set_ylim([-500,-100])
+# ax1.set_xlim([0,6])
+# ax1.grid()
+#ax1.legend(loc = 'lower left',prop = {'size':8})
+plt.savefig(outputPath+fname,dpi=150,bbox_inches='tight')
 
 
 # In[ ]:
