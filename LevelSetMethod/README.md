@@ -1,3 +1,7 @@
+### Level-set method
+The level set method \citep{Osher1988} is using the level set function (the sighed distance function) to tracing the material interface. It is generally build within the Eulerian framework and has been extended to the hybrid Eulerian‐Lagrangian framework as the Particle Level Set method \citep{Enright2002}. See details in comprehensive review \citep{Gibou2018}. There are serval applied cases of this method in the geodynamics community, such as modeling incompressible two-phase flow \citep{Sussman1994}, mantle plumes \citep{Gross2007}, gravitational instabilities \citep{Zlotnik2009}, and benchmarks with level set method \citep{Hillebrand2014}; modelling geophsyics flow with particle level set \citep{Samuel2010,Wu2023}; application in geodynamics codes \citep{Braun2008}.
+
+
 ### Level-set representation and equations
 
 $\Gamma$ denotes the interface that is to be associated and tracked with the level set function $\phi$, and $\Omega$ is a bounded region. $\phi$ is defined as the signed distance function to $\Gamma$:
