@@ -1,9 +1,22 @@
 # Freesurface modelling examples
 
-### Introduction
+### TODO
+
+- [x] Free surface (ALE) implemenation in uw3, Test cases (in parallel):
+
+    - Topography relaxation model (Turcotte & Schubert, 2002)
+    - RTI model (Kaus et.al., 2010)
+    - Case 1 (Crameri et al., 2012)
+
+- [x] Marker chain method 
+
+- [x] Marker chain method with free surface 
+
+- [ ] Level set method 
 
 
 ### Method
+### Free surface (ALE)
 
 1.Mesh Deform for free surface
 
@@ -33,21 +46,19 @@ The Arbitrary Lagrangian–Eulerian formulation is adapted here to simulate the 
 - add particles to the underpopulated_cells from the new swarm build on the deformed mesh
 - delete particles from the overpopulated cells that are the closest to the cell centroids (random in redistribute)
 
-### Models:
+### Level set method
 
-1. Topography relaxation model (Turcotte & Schubert, 2002)
+### Marker chain method
+
+
+### Result
+
+1. Topography relaxation model 
 
    <img src="images/swarm_norepo.png" alt="image" width="400" height="auto">
    <img src="images/swarm_repo.png" alt="image" width="400" height="auto">
    <img src="images/swarm_final.png" alt="image" width="400" height="auto">
    <img src="images/Topography of the box mid.png" alt="image" width="400" height="auto">
-
-2. RTI model (Kaus et.al., 2010)
-
-   <img src="images/swarm_01.png" alt="image" width="500" height="auto">
-
-
-### 1. Topography relaxation model 
 
 Loading and unloading of a viscous half-space. see the similar case in uw2: [ViscoElasticHalfSpace](https://github.com/underworldcode/underworld2/blob/master/docs/UWGeodynamics/examples/1_08_ViscoElasticHalfSpace.ipynb)
 
@@ -61,6 +72,9 @@ where $w$ is displacement, $w_m$ the initial load magnitude, $g$ gravity, $t$ ti
 
 
 ### 2. RTI model
+
+
+   <img src="images/swarm_01.png" alt="image" width="500" height="auto">
 
 Rayleigh–Taylor instability ofadense,moreviscous layer ($\rho = 3300 kg/m^3$, $\eta = 10^{21} Pa s$), sinkingthrougha less densefluid ($\rho = 3200 kg/m^3$, $\eta = 10^{20} Pa s$). Side boundaries are free slip, the lower boundary is no-slip and the upper boundary is a free surface. The box is 500 × 500 km in size, and gravitational acceleration was 9.81 $m/s^2$. The initial perturbation was sinusoidal with an initial amplitude of 5 km. A constant time step of 2500 years was employed, with Q1P0 elements and 51×51 nodes.
 
