@@ -3,14 +3,14 @@
 #PBS -l walltime=1:00:00
 #PBS -l mem=100GB
 #PBS -l jobfs=10MB
-#PBS -l ncpus=8
+#PBS -l ncpus=4
 #PBS -l software=underworld
 #PBS -l wd
 #PBS -l storage=gdata/m18
 #PBS -N res32
 
-
 source /scratch/m18/nl3963/gadi_install.sh
+from mpi4py import MPI
 
 MODELNAME="res32"
 OUTPUTPATH="./"
